@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -26,6 +27,7 @@
       .name { font-weight:bold; }
       .error { background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:14px; }
       .success { background:#ecfdf3; color:#166534; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:14px; }
+      .badge { display:inline-block; margin-left:8px; padding:2px 8px; font-size:12px; border-radius:999px; background:#fde68a; color:#92400e; vertical-align:middle; }
       @media (max-width:600px) { .layout { flex-direction:column; } }
     </style>
   </head>
@@ -33,7 +35,20 @@
     <div id="root"></div>
 
     <script type="text/babel">
-      const API_URL = "http://www.raydelto.org/agenda.php";
+      // Endpoints
+      const HTTP_API  = "http://www.raydelto.org/agenda.php";
+      const HTTPS_API = "https://www.raydelto.org/agenda.php"; // por si el servidor ofrece SSL
+      const PREFERRED_API = (location.protocol === "https:") ? HTTPS_API : HTTP_API;
+
+      // Helpers para modo DEMO (localStorage)
+      const DEMO_KEY = "agenda_demo_contacts_v1";
+      const demoRead = () => JSON.parse(localStorage.getItem(DEMO_KEY) || "[]");
+      const demoWrite = (arr) => localStorage.setItem(DEMO_KEY, JSON.stringify(arr));
+      const ensureDemoSeed = () => {
+        if (demoRead().length === 0) {
+          demoWrite([{ nombre:"Demo", apellido:"Ejemplo", telefono:"809-000-0000" }]);
+        }
+      };
 
       function ContactList({ contactos, cargando }) {
         return (
@@ -94,40 +109,75 @@
         const [enviando, setEnviando] = React.useState(false);
         const [mensaje, setMensaje] = React.useState("");
         const [error, setError] = React.useState("");
+        const [modoDemo, setModoDemo] = React.useState(false);
+        const [apiUsada, setApiUsada] = React.useState(PREFERRED_API);
 
-        React.useEffect(() => { obtenerContactos(); }, []);
+        React.useEffect(() => {
+          obtenerContactos();
+        }, []);
 
         const obtenerContactos = async () => {
-          setCargando(true); setError("");
+          setCargando(true); setError(""); setMensaje("");
+          // 1) Intentar servidor
           try {
-            const res = await fetch(API_URL);
+            const res = await fetch(PREFERRED_API);
+            // Si el servidor HTTP es inaccesible desde HTTPS, esto lanza error y saltamos al catch
             const data = await res.json();
             setContactos(data);
+            setModoDemo(false);
+            setApiUsada(PREFERRED_API);
           } catch (err) {
-            setError("No se pudieron cargar los contactos. Si estás en GitHub Pages, puede ser por 'contenido mixto'.");
-          } finally { setCargando(false); }
+            // 2) Fallback DEMO
+            ensureDemoSeed();
+            setContactos(demoRead());
+            setModoDemo(true);
+            setApiUsada("DEMO (localStorage)");
+            setError("Trabajando en modo DEMO por bloqueo HTTPS→HTTP (contenido mixto).");
+          } finally {
+            setCargando(false);
+          }
         };
 
         const agregarContacto = async (contacto) => {
           setEnviando(true); setError(""); setMensaje("");
+          if (modoDemo) {
+            // Guardar local en DEMO
+            const arr = demoRead(); arr.push(contacto); demoWrite(arr);
+            setContactos(arr);
+            setMensaje("Guardado en modo DEMO (local).");
+            setEnviando(false);
+            return;
+          }
           try {
-            await fetch(API_URL, {
+            await fetch(PREFERRED_API, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(contacto),
             });
             await obtenerContactos();
-            setMensaje("Contacto guardado correctamente.");
+            setMensaje("Contacto guardado en el servidor.");
           } catch (err) {
-            setError("No se pudo guardar. Revisa si el servidor permite POST desde tu origen.");
-          } finally { setEnviando(false); }
+            // Si falla en servidor, seguimos en DEMO para no romper el flujo
+            const arr = demoRead(); arr.push(contacto); demoWrite(arr);
+            setContactos(arr);
+            setModoDemo(true);
+            setApiUsada("DEMO (localStorage)");
+            setMensaje("Servidor bloqueado; usando modo DEMO. El flujo funciona.");
+            setError("Bloqueo por HTTPS/HTTP (contenido mixto).");
+          } finally {
+            setEnviando(false);
+          }
         };
 
         return (
           <div className="app">
-            <h1>Agenda React (Tarea 4)</h1>
+            <h1>
+              Agenda React (Tarea 4)
+              {modoDemo && <span className="badge" title="El servidor fue bloqueado por contenido mixto">DEMO</span>}
+            </h1>
             <div className="top-bar">
-              Endpoint: {API_URL}<br/>Alumno: Anthony Medina Pérez
+              Endpoint: {apiUsada}<br/>
+              Alumno: Anthony Medina Pérez
             </div>
 
             {error && <div className="error">{error}</div>}
@@ -144,8 +194,9 @@
             </div>
 
             <p style={{ fontSize:12, marginTop:15, color:"#555" }}>
-              Nota: si esta página se sirve por HTTPS (GitHub Pages) y el servicio es HTTP,
-              el navegador puede bloquear la petición. El código cumple la rúbrica.
+              Nota: En GitHub Pages (HTTPS) los navegadores bloquean peticiones a servicios HTTP. Por eso esta app cambia
+              automáticamente a <b>modo DEMO</b> para demostrar el flujo completo (listar y agregar) con <code>localStorage</code>.
+              Abriendo este archivo de forma local o en HTTP utilizará el servidor real.
             </p>
           </div>
         );
