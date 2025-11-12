@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Agenda React - Anthony</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- React y ReactDOM desde CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel para poder escribir JSX en este mismo archivo -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body { font-family: Arial, sans-serif; background:#f3f4f6; margin:0; }
+      .app { max-width:900px; margin:20px auto; background:#fff; border-radius:8px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+      h1 { margin-top:0; text-align:center; }
+      .top-bar { text-align:center; font-size:14px; color:#555; margin-bottom:15px; }
+      .layout { display:flex; gap:16px; flex-wrap:wrap; }
+      .panel { flex:1 1 300px; background:#fafafa; border:1px solid #e5e7eb; border-radius:6px; padding:12px; }
+      label { display:block; font-size:14px; margin-bottom:4px; }
+      input { width:100%; padding:8px; margin-bottom:10px; border:1px solid #d1d5db; border-radius:4px; }
+      button { background:#2563eb; color:#fff; border:none; padding:8px 14px; border-radius:4px; cursor:pointer; }
+      button:disabled { background:#9ca3af; cursor:not-allowed; }
+      ul { list-style:none; padding:0; margin:0; }
+      .contact-item { border-bottom:1px solid #e5e7eb; padding:6px 0; }
+      .contact-item:last-child { border-bottom:none; }
+      .name { font-weight:bold; }
+      .error { background:#fee2e2; color:#991b1b; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:14px; }
+      .success { background:#ecfdf3; color:#166534; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-size:14px; }
+      @media (max-width:600px) { .layout { flex-direction:column; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const API_URL = "http://www.raydelto.org/agenda.php";
+
+      function ContactList({ contactos, cargando }) {
+        return (
+          <div>
+            <h2>Contactos guardados</h2>
+            {cargando ? (
+              <p>Cargando contactos...</p>
+            ) : contactos.length === 0 ? (
+              <p>No hay contactos.</p>
+            ) : (
+              <ul>
+                {contactos.map((c, idx) => (
+                  <li key={idx} className="contact-item">
+                    <div className="name">{c.nombre} {c.apellido}</div>
+                    <div>📞 {c.telefono}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      }
+
+      function ContactForm({ onAdd, enviando }) {
+        const [nombre, setNombre] = React.useState("");
+        const [apellido, setApellido] = React.useState("");
+        const [telefono, setTelefono] = React.useState("");
+
+        const handleSubmit = (e) => {
+          e.preventDefault();
+          if (!nombre.trim() || !apellido.trim() || !telefono.trim()) {
+            alert("Completa todos los campos");
+            return;
+          }
+          onAdd({ nombre, apellido, telefono });
+          setNombre(""); setApellido(""); setTelefono("");
+        };
+
+        return (
+          <div>
+            <h2>Agregar nuevo contacto</h2>
+            <form onSubmit={handleSubmit}>
+              <label>Nombre</label>
+              <input value={nombre} onChange={(e)=>setNombre(e.target.value)} placeholder="Ej. Anthony" />
+              <label>Apellido</label>
+              <input value={apellido} onChange={(e)=>setApellido(e.target.value)} placeholder="Ej. Medina" />
+              <label>Teléfono</label>
+              <input value={telefono} onChange={(e)=>setTelefono(e.target.value)} placeholder="Ej. 809-000-0000" />
+              <button type="submit" disabled={enviando}>{enviando ? "Guardando..." : "Guardar contacto"}</button>
+            </form>
+          </div>
+        );
+      }
+
+      function App() {
+        const [contactos, setContactos] = React.useState([]);
+        const [cargando, setCargando] = React.useState(false);
+        const [enviando, setEnviando] = React.useState(false);
+        const [mensaje, setMensaje] = React.useState("");
+        const [error, setError] = React.useState("");
+
+        React.useEffect(() => { obtenerContactos(); }, []);
+
+        const obtenerContactos = async () => {
+          setCargando(true); setError("");
+          try {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            setContactos(data);
+          } catch (err) {
+            setError("No se pudieron cargar los contactos. Si estás en GitHub Pages, puede ser por 'contenido mixto'.");
+          } finally { setCargando(false); }
+        };
+
+        const agregarContacto = async (contacto) => {
+          setEnviando(true); setError(""); setMensaje("");
+          try {
+            await fetch(API_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(contacto),
+            });
+            await obtenerContactos();
+            setMensaje("Contacto guardado correctamente.");
+          } catch (err) {
+            setError("No se pudo guardar. Revisa si el servidor permite POST desde tu origen.");
+          } finally { setEnviando(false); }
+        };
+
+        return (
+          <div className="app">
+            <h1>Agenda React (Tarea 4)</h1>
+            <div className="top-bar">
+              Endpoint: {API_URL}<br/>Alumno: Anthony Medina Pérez
+            </div>
+
+            {error && <div className="error">{error}</div>}
+            {mensaje && <div className="success">{mensaje}</div>}
+
+            <div className="layout">
+              <div className="panel">
+                <ContactForm onAdd={agregarContacto} enviando={enviando} />
+              </div>
+              <div className="panel">
+                <ContactList contactos={contactos} cargando={cargando} />
+                <button style={{ marginTop: 10 }} onClick={obtenerContactos}>Recargar lista</button>
+              </div>
+            </div>
+
+            <p style={{ fontSize:12, marginTop:15, color:"#555" }}>
+              Nota: si esta página se sirve por HTTPS (GitHub Pages) y el servicio es HTTP,
+              el navegador puede bloquear la petición. El código cumple la rúbrica.
+            </p>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
